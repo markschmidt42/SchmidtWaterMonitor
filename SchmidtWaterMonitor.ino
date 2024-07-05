@@ -6,11 +6,7 @@
 #define TRIGPIN 10
 #define ECHOPIN 11
 
-
 const int MAIN_LOOP_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
-
-// https://asksensors.com/editSensor.html?id=11514
-String TANK_API_KEY = ASK_SENSORS_API_TANK;
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
 const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
@@ -25,12 +21,6 @@ const int TANK_SIZE_IN_GALLONS = 450;
 // How many gallons are there per CM?
 // Measure the Tank from the 120 to the 180 mark (or larger), so 60 gals, x 2 (for 2 tanks), 120 gallons / distance in CM
 const float TANK_GALLONS_PER_CM = 2.57235; // 80 / 31.1
-
-
-// ASKSENSORS API host config
-// String host = "api.asksensors.com";  // API host name
-// const unsigned int writeInterval = 25000; // write interval (in ms)
-char server[] = "api.asksensors.com";  // server address
 
 WiFiClient client;
 
@@ -106,34 +96,36 @@ void loop() {
 }
 
 void sendDataToCloud(TankInfo tankInfo) {
-    Serial.println("\nStarting connection to server...");
-    // if you get a connection, report back via serial:
-    if (client.connect(server, 80)) {
-      Serial.println("connected to server");
-      // Make a HTTP request:
-      // https://api.asksensors.com/write/eiECk9BfGWMq2o2ubCgkXlTW0szLFj11?module1=3
+  // Send data to "api.asksensors.com"
+  Serial.println("\nStarting connection to server...");
 
-      String request = "GET /write/";
-      request += TANK_API_KEY;
-      request += "?module1=";
-      request += String(tankInfo.distance, 4); // Convert float to string with 4 decimal places
-      request += "&module2=";
-      request += String(tankInfo.level, 4); // Convert float to string with 4 decimal places
-      request += "&module3=";
-      request += String(tankInfo.gallons, 4); // Convert float to string with 4 decimal places
-      request += "&module4=";
-      request += String(tankInfo.flowRate, 4); // Convert float to string with 4 decimal places
-      request += " HTTP/1.1";
+  // if you get a connection, report back via serial:
+  if (client.connect("api.asksensors.com", 80)) {
+    Serial.println("connected to server");
+    // Make a HTTP request:
+    // https://api.asksensors.com/write/eiECk9BfGWMq2o2ubCgkXlTW0szLFj11?module1=3
 
-      // request = "GET /write/xxxx?module1=2.3455&module2=2&module3=3 HTTP/1.1"
+    String request = "GET /write/";
+    request += ASK_SENSORS_API_TANK;
+    request += "?module1=";
+    request += String(tankInfo.distance, 4); // Convert float to string with 4 decimal places
+    request += "&module2=";
+    request += String(tankInfo.level, 4); // Convert float to string with 4 decimal places
+    request += "&module3=";
+    request += String(tankInfo.gallons, 4); // Convert float to string with 4 decimal places
+    request += "&module4=";
+    request += String(tankInfo.flowRate, 4); // Convert float to string with 4 decimal places
+    request += " HTTP/1.1";
 
-      Serial.println(request);
+    // request = "GET /write/xxxx?module1=2.3455&module2=2&module3=3 HTTP/1.1"
 
-      client.println(request);
-      client.println("Host: api.asksensors.com");
-      client.println("Connection: close");
-      client.println();
-    }
+    Serial.println(request);
+
+    client.println(request);
+    client.println("Host: api.asksensors.com");
+    client.println("Connection: close");
+    client.println();
+  }
 }
 
 TankInfo getTankInfo() {
