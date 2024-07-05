@@ -40,30 +40,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting up...");
 
-  connectToWifi();
-
-  // Set pinmodes for sensor connections
-  pinMode(ECHOPIN, INPUT);
-  pinMode(TRIGPIN, OUTPUT);
-}
-
-void connectToWifi() {
-  Serial.println("Connecting Wifi...");
-  char ssid[] = WIFI_SSID;
-  char pass[] = WIFI_PASS;
-
-  int status = WL_IDLE_STATUS;     // the WiFi radio's status
-  while (status != WL_CONNECTED) {
-    Serial.print("Attempting initial connection to WPA SSID: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
-
-    // wait 10 seconds for connection:
-    delay(9000);
-  }
-
-  Serial.println("Wifi Connected...");
+  initWifi();
+  initTankLevelSensor();
 }
 
 void loop() {
@@ -93,6 +71,31 @@ void loop() {
 
   // Delay before repeating measurement
   delay(MAIN_LOOP_DELAY);
+}
+
+void initTankLevelSensor() {
+  // Set pinmodes for sensor connections
+  pinMode(ECHOPIN, INPUT);
+  pinMode(TRIGPIN, OUTPUT);
+}
+
+void initWifi() {
+  Serial.println("Connecting Wifi...");
+  char ssid[] = WIFI_SSID;
+  char pass[] = WIFI_PASS;
+
+  int status = WL_IDLE_STATUS;     // the WiFi radio's status
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting initial connection to WPA SSID: ");
+    Serial.println(ssid);
+    // Connect to WPA/WPA2 network:
+    status = WiFi.begin(ssid, pass);
+
+    // wait 10 seconds for connection:
+    delay(9000);
+  }
+
+  Serial.println("Wifi Connected...");
 }
 
 void sendDataToCloud(TankInfo tankInfo) {
