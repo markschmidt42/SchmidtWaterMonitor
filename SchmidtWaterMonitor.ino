@@ -9,10 +9,12 @@
 // https://asksensors.com/editSensor.html?id=11514
 String TANK_API_KEY = ASK_SENSORS_API_TANK;
 
+const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
+const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
 const float INVALID_READING_TOO_CLOSE = -1000;
 
 // How far away is the top of the tank from the sensor?
-const float TOP_OF_TANK_MM = 100;
+const float TOP_OF_TANK_MM = 300;
 
 // How big is the tank?
 const int TANK_SIZE_IN_GALLONS = 450;
@@ -81,7 +83,7 @@ void loop() {
 
     // Print result to serial monitor
     Serial.print("Average distance: ");
-    Serial.print(tankInfo.level);
+    Serial.print(tankInfo.distance);
     Serial.print(" mm (");
     Serial.print(tankLevelFeetAndInches);
     Serial.println(")");
@@ -200,16 +202,17 @@ float getDistanceReading() {
  
     // Measure the width of the incoming pulse
     float duration = pulseIn(ECHOPIN, HIGH);
-    if (duration < 1400) {
-      Serial.print("INVALID READING, BACK UP: ");
-      Serial.println(duration);
-      return INVALID_READING_TOO_CLOSE;
-    }
  
     // Determine distance from duration
     // Use 343 metres per second as speed of sound
     // Divide by 1000 as we want millimeters
-    float distance = (duration / 2) * 0.343;
+    float distance = ((duration / 2) * 0.343) + SENSOR_OFFSET_MM;
+
+    if (distance < SENSOR_MIN_RANGE_MM) {
+      Serial.print("INVALID READING, BACK UP: ");
+      Serial.println(distance);
+      return INVALID_READING_TOO_CLOSE;
+    }
 
     return distance;
 }
