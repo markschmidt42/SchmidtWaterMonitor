@@ -6,6 +6,9 @@
 #define TRIGPIN 10
 #define ECHOPIN 11
 
+
+const int MAIN_LOOP_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
+
 // https://asksensors.com/editSensor.html?id=11514
 String TANK_API_KEY = ASK_SENSORS_API_TANK;
 
@@ -36,8 +39,11 @@ struct TankInfo {
   float level;
   float gallons;
   float flowRate;
+  float mmPerSecondRate;
+  unsigned long readingTime;
 };
 
+TankInfo previousTankInfo = {0, 0, 0, 0, 0, 0};
 
 void setup() {
   // Set up serial monitor
@@ -92,8 +98,11 @@ void loop() {
     delay(2500);    
   }
 
+  // Update previousTankInfo
+  previousTankInfo = tankInfo;
+
   // Delay before repeating measurement
-  delay(100);
+  delay(MAIN_LOOP_DELAY);
 }
 
 void sendDataToCloud(TankInfo tankInfo) {
@@ -129,14 +138,36 @@ void sendDataToCloud(TankInfo tankInfo) {
 
 TankInfo getTankInfo() {
   TankInfo info;
+  info.readingTime = millis();
+
   info.distance = getAverageDistanceReading(10);
 
-  // convert mm to gallons
-  // this is really the "empty space, in gallons"
-  const float GALLONS_FROM_TOP = ((info.distance - TOP_OF_TANK_MM)/10) * TANK_GALLONS_PER_CM;
+  // Convert mm to gallons
+  // This is really the "empty space, in gallons"
+  const float GALLONS_FROM_TOP = ((info.distance - TOP_OF_TANK_MM) / 10) * TANK_GALLONS_PER_CM;
   info.gallons = TANK_SIZE_IN_GALLONS - GALLONS_FROM_TOP;
   info.level = info.gallons / TANK_SIZE_IN_GALLONS;
+
+
+  // default to no change
+  info.mmPerSecondRate = 0;
   info.flowRate = 0;
+
+  // Calculate flow rates
+  if (previousTankInfo.readingTime > 0) {
+    unsigned long timeDifference = info.readingTime - previousTankInfo.readingTime; // Time difference in milliseconds
+    float distanceDifference = info.distance - previousTankInfo.distance; // Distance difference in mm
+    float gallonsDifference  = info.gallons - previousTankInfo.gallons;
+
+    Serial.print("fabs(distanceDifference): ");
+    Serial.println(fabs(distanceDifference));
+    // diff needs to be more than 1.1 mm (spec says it is good within 10 mm, but it seems to be better than that, I am going with 1.1)
+    if (fabs(distanceDifference) > 1.1) {
+      info.mmPerSecondRate = distanceDifference / (timeDifference / 1000.0); // Convert ms to seconds
+      info.flowRate = gallonsDifference / (timeDifference / 60000.0); // Convert to gallons per minute
+    }
+  }
+
 
   // DEBUG
   Serial.print("Tank info: Distance: ");
@@ -145,9 +176,11 @@ TankInfo getTankInfo() {
   Serial.print(info.gallons);
   Serial.print(", Level: ");
   Serial.print(info.level);
-  Serial.print(", flowRate: ");
-  Serial.println(info.flowRate);
-  
+  Serial.print(", Flow Rate: ");
+  Serial.print(info.flowRate);
+  Serial.print(" GPM, mm/s Rate: ");
+  Serial.println(info.mmPerSecondRate);
+
   return info;
 }
 
