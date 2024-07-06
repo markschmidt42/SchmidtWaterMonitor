@@ -1,12 +1,24 @@
 #include "arduino_secrets.h"
+#include "thingProperties.h"
 #include <SPI.h>
 #include <WiFi.h>
+#include "Arduino_LED_Matrix.h"
+#include "Arduino_CloudConnectionFeedback.h"
 
 // Define connections to sensor
 #define TRIGPIN 10
 #define ECHOPIN 11
 
-const int TANK_READING_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
+#define WATER_SENSOR_PIN_DRAIN     A0
+#define WATER_SENSOR_PIN_PUMP      A1
+#define WATER_SENSOR_PIN_SUMP_PUMP A2
+#define WATER_SENSOR_PIN_RO        A3
+
+
+// const int SENSORS_READING_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
+
+// for testing, do it a little faster
+const int SENSORS_READING_DELAY = 1000 * 12; // every 12 seconds (on top of the read delays due to avgs)
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
 const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
@@ -35,45 +47,74 @@ struct TankInfo {
 
 TankInfo previousTankInfo = {0, 0, 0, 0, 0, 0};
 
+struct LeakInfo {
+  unsigned int drain;
+  unsigned int pump;
+  unsigned int sumpPump;
+  unsigned int ro;
+};
+
+ArduinoLEDMatrix matrix;
+
+
 unsigned long lastUpdate = 0;
 
 void setup() {
   // Set up serial monitor
   Serial.begin(115200);
+  delay(1500); 
   Serial.println("Starting up...");
 
-  initWifi();
+  // Connect to Arduino Cloud
+  initProperties();
+  /* Initialize Arduino IoT Cloud library */
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection);
+  ArduinoCloud.printDebugInfo();
+  // This line will block until we're connected to Arduino Cloud
+  // using the LED matrix to provide feedback
+  matrix.begin();
+  waitForArduinoCloudConnection(matrix);
+  
+  Serial.println("Program started!");
+
+  // Use the LED matrix to do something else
+  matrix.loadSequence(LEDMATRIX_ANIMATION_TETRIS_INTRO);
+  matrix.play(false);
+
+  setDebugMessageLevel(DBG_INFO);
+
   initTankLevelSensor();
 }
 
 void loop() {
+  ArduinoCloud.update();
 
-  if (millis() > (lastUpdate + TANK_READING_DELAY)) {
-    TankInfo tankInfo = getTankInfo();
-  
-    float tankLevelInInches = convertToInches(tankInfo.distance);
-    String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
+  // if (millis() > (lastUpdate + SENSORS_READING_DELAY)) {
+  TankInfo tankInfo = getTankInfo();
+  LeakInfo leakInfo = getLeakInfo();
+  lastUpdate = millis(); // we are going to consider this the last update time (so, if it takes time to push it to the cloud, we are ignorning that part)
 
-    if (tankInfo.distance == 0) {
-      Serial.println("INVALID READING!!!");
-    } else {
+  float tankLevelInInches = convertToInches(tankInfo.distance);
+  String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
 
-      // Print result to serial monitor
-      Serial.print("Average distance: ");
-      Serial.print(tankInfo.distance);
-      Serial.print(" mm (");
-      Serial.print(tankLevelFeetAndInches);
-      Serial.println(")");
-    }
+  if (tankInfo.distance == 0) {
+    Serial.println("INVALID READING!!!");
+  } else {
 
-
-    sendDataToCloud(tankInfo);
-    lastUpdate = millis();
-
-    // Update previousTankInfo
-    previousTankInfo = tankInfo;
+    // Print result to serial monitor
+    Serial.print("Average distance: ");
+    Serial.print(tankInfo.distance);
+    Serial.print(" mm (");
+    Serial.print(tankLevelFeetAndInches);
+    Serial.println(")");
   }
 
+  sendToArduinoCloud(tankInfo);
+  sendLeakInfoToCloud(leakInfo);
+
+  // Update previousTankInfo
+  previousTankInfo = tankInfo;
+  // }
 
   // Delay before repeating measurement
   delay(1000);
@@ -85,120 +126,26 @@ void initTankLevelSensor() {
   pinMode(TRIGPIN, OUTPUT);
 }
 
-void initWifi() {
-  Serial.println("Connecting Wifi...");
-  char ssid[] = WIFI_SSID;
-  char pass[] = WIFI_PASS;
-
-  int status = WL_IDLE_STATUS;     // the WiFi radio's status
-  while (status != WL_CONNECTED) {
-    Serial.print("Attempting initial connection to WPA SSID: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network:
-    status = WiFi.begin(ssid, pass);
-
-    // wait 10 seconds for connection:
-    delay(9000);
-  }
-
-  Serial.println("Wifi Connected...");
+void sendToArduinoCloud(TankInfo tankInfo) {
+  tank_distance_from_top_mm = tankInfo.distance;
+  tank_level_gallons        = tankInfo.gallons;
+  tank_level_percent        = tankInfo.level * 100;
+  tank_flow_rate_gpm        = tankInfo.flowRate;
 }
 
-void sendDataToCloud(TankInfo tankInfo) {
-  // Send data to "api.asksensors.com"
-  Serial.println("\nStarting connection to server...");
-
-  sendToAskSensors(tankInfo);
-  sendToAdafruitIO(tankInfo);
+void sendLeakInfoToCloud(LeakInfo leakInfo) {
+  water_sensor_drain = leakInfo.drain;
 }
 
-void sendToAskSensors(TankInfo tankInfo) {
-  // if you get a connection, report back via serial:
-  if (client.connect("api.asksensors.com", 80)) {
-    Serial.println("connected to server");
-    // Make a HTTP request:
-    // https://api.asksensors.com/write/eiECk9BfGWMq2o2ubCgkXlTW0szLFj11?module1=3
 
-    String request = "GET /write/";
-    request += ASK_SENSORS_API_TANK;
-    request += "?module1=";
-    request += String(tankInfo.distance, 4); // Convert float to string with 4 decimal places
-    request += "&module2=";
-    request += String(tankInfo.level * 100, 4); // Convert float to string with 4 decimal places
-    request += "&module3=";
-    request += String(tankInfo.gallons, 4); // Convert float to string with 4 decimal places
-    request += "&module4=";
-    request += String(tankInfo.flowRate, 4); // Convert float to string with 4 decimal places
-    request += " HTTP/1.1";
+LeakInfo getLeakInfo() {
+  LeakInfo leakInfo;
+  leakInfo.drain    = analogRead(WATER_SENSOR_PIN_DRAIN);
+  leakInfo.pump     = analogRead(WATER_SENSOR_PIN_PUMP);
+  leakInfo.sumpPump = analogRead(WATER_SENSOR_PIN_SUMP_PUMP);
+  leakInfo.ro       = analogRead(WATER_SENSOR_PIN_RO);
 
-    // request = "GET /write/xxxx?module1=2.3455&module2=2&module3=3 HTTP/1.1"
-
-    Serial.println(request);
-
-    client.println(request);
-    client.println("Host: api.asksensors.com");
-    client.println("Connection: close");
-    client.println();
-  }
-}
-
-void sendToAdafruitIO(TankInfo tankInfo) {
-  sendToAdafruitIOSingleValue("tank-distance-from-top-mm", tankInfo.distance);
-  sendToAdafruitIOSingleValue("tank-level-gallons", tankInfo.gallons);
-  sendToAdafruitIOSingleValue("tank-level-percent", tankInfo.level * 100);
-  sendToAdafruitIOSingleValue("tank-flow-rate-gpm", tankInfo.flowRate);
-}
-
-void sendToAdafruitIOSingleValue(String feedName, float value) {
-  // TODO: Implement, my feedname is ultrasonic-distance-mm, my username is ADAFRUIT_IO_USERNAME, my io_key is ADAFRUIT_IO_KEY
-  // I am not sure how to use the api key yet, I am guessing some header, bearer token???
-  // Sample:
-  // Send new data with a value of 42
-  // $ curl -F 'value=42' -H "X-AIO-Key: {io_key}" https://io.adafruit.com/api/v2/{username}/feeds/{feed_key}/data
-
-  if (client.connect("io.adafruit.com", 80)) {
-    Serial.println("connected to Adafruit IO");
-
-    // Prepare the data payload
-    String payload = "value=" + String(value, 4);
-
-    // Create the POST request
-    String request = "POST /api/v2/";
-    request += ADAFRUIT_IO_USERNAME;
-    request += "/feeds/";
-    request += feedName;
-    request += "/data HTTP/1.1\r\n";
-    request += "Host: io.adafruit.com\r\n";
-    request += "X-AIO-Key: ";
-    request += ADAFRUIT_IO_KEY;
-    request += "\r\n";
-    request += "Content-Type: application/x-www-form-urlencoded\r\n";
-    request += "Content-Length: ";
-    request += payload.length();
-    request += "\r\n\r\n";
-    request += payload;
-
-    // Send the request
-    Serial.println(request); // Print for debugging
-    client.print(request);
-    
-    // Wait for the response
-    while (client.connected()) {
-      String line = client.readStringUntil('\n');
-      if (line == "\r") {
-        break;
-      }
-    }
-    // Read the response
-    while (client.available()) {
-      String line = client.readStringUntil('\n');
-      Serial.println(line); // Print the response for debugging
-    }
-
-    client.stop();
-  } else {
-    Serial.println("connection to Adafruit IO failed");
-  }
+  return leakInfo;
 }
 
 TankInfo getTankInfo() {

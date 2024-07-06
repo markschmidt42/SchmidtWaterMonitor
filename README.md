@@ -6,3 +6,9 @@
 
 ## Keeping notes here:
 * https://docs.google.com/document/d/1agMtmBjYsOMoDZTP4jmkQQj3XLyxHzSQp15ZJTUTBP8/edit
+
+
+
+
+## Arduino Cloud:
+* https://docs.arduino.cc/arduino-cloud/api/arduino-iot-api/
