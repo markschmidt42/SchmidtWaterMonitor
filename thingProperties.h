@@ -10,9 +10,13 @@ float tank_level_gallons;
 float tank_level_percent;
 float tank_flow_rate_gpm;
 
-float water_sensor_drain;
+int water_sensor_drain;
+int water_sensor_pump;
+int water_sensor_sump_pump;
+int water_sensor_ro;
 
-const int READ_EVERY_SECONDS = 10;
+
+const int READ_EVERY_SECONDS = 5;
 
 void initProperties() {
   ArduinoCloud.setThingId(THING_ID);
@@ -22,6 +26,9 @@ void initProperties() {
   ArduinoCloud.addProperty(tank_flow_rate_gpm,        READ, READ_EVERY_SECONDS * SECONDS, NULL);
 
   ArduinoCloud.addProperty(water_sensor_drain,        READ, READ_EVERY_SECONDS * SECONDS, NULL);
+  ArduinoCloud.addProperty(water_sensor_pump,         READ, READ_EVERY_SECONDS * SECONDS, NULL);
+  ArduinoCloud.addProperty(water_sensor_sump_pump,    READ, READ_EVERY_SECONDS * SECONDS, NULL);
+  ArduinoCloud.addProperty(water_sensor_ro,           READ, READ_EVERY_SECONDS * SECONDS, NULL);
 }
 
 WiFiConnectionHandler ArduinoIoTPreferredConnection(WIFI_SSID, WIFI_PASS);

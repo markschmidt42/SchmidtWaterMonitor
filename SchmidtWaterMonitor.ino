@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include "Arduino_LED_Matrix.h"
 #include "Arduino_CloudConnectionFeedback.h"
+#include "MedianFilterLib.h"
 
 // Define connections to sensor
 #define TRIGPIN 10
@@ -21,11 +22,11 @@
 const int SENSORS_READING_DELAY = 1000 * 12; // every 12 seconds (on top of the read delays due to avgs)
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
-const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
+const float SENSOR_MIN_RANGE_MM = 200; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
 const float INVALID_READING_TOO_CLOSE = -1000;
 
 // How far away is the top of the tank from the sensor?
-const float TOP_OF_TANK_MM = 300;
+const float TOP_OF_TANK_MM = -116;
 
 // How big is the tank?
 const int TANK_SIZE_IN_GALLONS = 450;
@@ -128,31 +129,43 @@ void initTankLevelSensor() {
 
 void sendToArduinoCloud(TankInfo tankInfo) {
   tank_distance_from_top_mm = tankInfo.distance;
-  tank_level_gallons        = tankInfo.gallons;
+  tank_level_gallons        = round(tankInfo.gallons);
   tank_level_percent        = tankInfo.level * 100;
   tank_flow_rate_gpm        = tankInfo.flowRate;
 }
 
 void sendLeakInfoToCloud(LeakInfo leakInfo) {
-  water_sensor_drain = leakInfo.drain;
+  water_sensor_drain     = leakInfo.drain;
+  water_sensor_pump      = leakInfo.pump;
+  water_sensor_sump_pump = leakInfo.sumpPump;
+  water_sensor_ro        = leakInfo.ro;
 }
 
 
 LeakInfo getLeakInfo() {
   LeakInfo leakInfo;
-  leakInfo.drain    = analogRead(WATER_SENSOR_PIN_DRAIN);
-  leakInfo.pump     = analogRead(WATER_SENSOR_PIN_PUMP);
-  leakInfo.sumpPump = analogRead(WATER_SENSOR_PIN_SUMP_PUMP);
-  leakInfo.ro       = analogRead(WATER_SENSOR_PIN_RO);
+  leakInfo.drain    = getWaterSensorPercent(WATER_SENSOR_PIN_DRAIN);
+  leakInfo.pump     = getWaterSensorPercent(WATER_SENSOR_PIN_PUMP);
+  leakInfo.sumpPump = getWaterSensorPercent(WATER_SENSOR_PIN_SUMP_PUMP);
+  leakInfo.ro       = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
 
   return leakInfo;
+}
+
+int getWaterSensorPercent(int pin) {
+  int rawValue = analogRead(pin);
+
+  // we will use 400 as the MAX VALUE
+  int pct = (rawValue / 400.00) * 100;
+  if (pct > 100) return 100;
+  return pct;
 }
 
 TankInfo getTankInfo() {
   TankInfo info;
   info.readingTime = millis();
 
-  info.distance = getAverageDistanceReading(10);
+  info.distance = getAverageDistanceReading(50);
 
   // Convert mm to gallons
   // This is really the "empty space, in gallons"
@@ -196,22 +209,60 @@ TankInfo getTankInfo() {
   return info;
 }
 
+// float getMinDistanceReading(int numReadings) {
+//   int totalReadings = 0;
+//   int validReadings = 0;
+  
+//   float minValue = 10000000;
+
+//   float distance = 0;
+
+//   while (validReadings < numReadings) {
+//     distance = getDistanceReading();
+//     Serial.print("   distance: ");
+//     Serial.println(distance);
+
+
+//     if (distance > 0) {
+//       if (distance < minValue) {
+//         minValue = distance;
+//       }
+//       validReadings++;
+//     }
+
+//     totalReadings++;
+
+//     // if we cannot get valid readings, then we will bail
+//     if (totalReadings >= numReadings * 10) {
+//       break;
+//     }
+//     delay(100); // Small delay between readings
+//   }
+
+//   Serial.print("* *minValue: ");
+//   Serial.println(minValue);
+//   return minValue;
+// }
+
 float getAverageDistanceReading(int numReadings = 10);
 float getAverageDistanceReading(int numReadings) {
   int totalReadings = 0;
-  float readings[numReadings]; // The readings from the sensor
-  int readIndex = 0;           // The index of the current reading
-  float total = 0;             // The running total
-  float average = 0;           // The average
-
   int validReadings = 0;
 
   float distance = 0;
+  float median = 0;
+
+  MedianFilter<float> medianFilter(numReadings);
+
   while (validReadings < numReadings) {
     distance = getDistanceReading();
  
     if (distance > 0) {
-      total += distance;
+      median = medianFilter.AddValue(distance);
+      Serial.print("   distance: ");
+      Serial.print(distance);
+      Serial.print("   median: ");
+      Serial.println(median);
       validReadings++;
     }
     
@@ -221,16 +272,10 @@ float getAverageDistanceReading(int numReadings) {
     if (totalReadings >= numReadings * 10) {
       break;
     }
-    delay(10); // Small delay between readings
+    delay(100); // Small delay between readings
   }
 
-  if (validReadings > 0) {
-    average = total / validReadings;
-  } else {
-    average = 0;
-  }
-
-  return average;
+  return median;
 }
 
 float getDistanceReading() {
