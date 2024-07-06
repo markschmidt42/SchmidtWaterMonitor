@@ -6,7 +6,7 @@
 #define TRIGPIN 10
 #define ECHOPIN 11
 
-const int MAIN_LOOP_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
+const int TANK_READING_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
 const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
@@ -35,6 +35,8 @@ struct TankInfo {
 
 TankInfo previousTankInfo = {0, 0, 0, 0, 0, 0};
 
+unsigned long lastUpdate = 0;
+
 void setup() {
   // Set up serial monitor
   Serial.begin(115200);
@@ -45,32 +47,36 @@ void setup() {
 }
 
 void loop() {
-  TankInfo tankInfo = getTankInfo();
- 
-  float tankLevelInInches = convertToInches(tankInfo.distance);
-  String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
 
-  if (tankInfo.distance == 0) {
-    Serial.println("INVALID READING!!!");
+  if (millis() > (lastUpdate + TANK_READING_DELAY)) {
+    TankInfo tankInfo = getTankInfo();
+  
+    float tankLevelInInches = convertToInches(tankInfo.distance);
+    String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
+
+    if (tankInfo.distance == 0) {
+      Serial.println("INVALID READING!!!");
+    } else {
+
+      // Print result to serial monitor
+      Serial.print("Average distance: ");
+      Serial.print(tankInfo.distance);
+      Serial.print(" mm (");
+      Serial.print(tankLevelFeetAndInches);
+      Serial.println(")");
+    }
+
+
     sendDataToCloud(tankInfo);
-  } else {
+    lastUpdate = millis();
 
-    // Print result to serial monitor
-    Serial.print("Average distance: ");
-    Serial.print(tankInfo.distance);
-    Serial.print(" mm (");
-    Serial.print(tankLevelFeetAndInches);
-    Serial.println(")");
-
-    sendDataToCloud(tankInfo);
-    delay(2500);    
+    // Update previousTankInfo
+    previousTankInfo = tankInfo;
   }
 
-  // Update previousTankInfo
-  previousTankInfo = tankInfo;
 
   // Delay before repeating measurement
-  delay(MAIN_LOOP_DELAY);
+  delay(1000);
 }
 
 void initTankLevelSensor() {
@@ -102,6 +108,11 @@ void sendDataToCloud(TankInfo tankInfo) {
   // Send data to "api.asksensors.com"
   Serial.println("\nStarting connection to server...");
 
+  sendToAskSensors(tankInfo);
+  sendToAdafruitIO(tankInfo);
+}
+
+void sendToAskSensors(TankInfo tankInfo) {
   // if you get a connection, report back via serial:
   if (client.connect("api.asksensors.com", 80)) {
     Serial.println("connected to server");
@@ -113,7 +124,7 @@ void sendDataToCloud(TankInfo tankInfo) {
     request += "?module1=";
     request += String(tankInfo.distance, 4); // Convert float to string with 4 decimal places
     request += "&module2=";
-    request += String(tankInfo.level, 4); // Convert float to string with 4 decimal places
+    request += String(tankInfo.level * 100, 4); // Convert float to string with 4 decimal places
     request += "&module3=";
     request += String(tankInfo.gallons, 4); // Convert float to string with 4 decimal places
     request += "&module4=";
@@ -128,6 +139,65 @@ void sendDataToCloud(TankInfo tankInfo) {
     client.println("Host: api.asksensors.com");
     client.println("Connection: close");
     client.println();
+  }
+}
+
+void sendToAdafruitIO(TankInfo tankInfo) {
+  sendToAdafruitIOSingleValue("tank-distance-from-top-mm", tankInfo.distance);
+  sendToAdafruitIOSingleValue("tank-level-gallons", tankInfo.gallons);
+  sendToAdafruitIOSingleValue("tank-level-percent", tankInfo.level * 100);
+  sendToAdafruitIOSingleValue("tank-flow-rate-gpm", tankInfo.flowRate);
+}
+
+void sendToAdafruitIOSingleValue(String feedName, float value) {
+  // TODO: Implement, my feedname is ultrasonic-distance-mm, my username is ADAFRUIT_IO_USERNAME, my io_key is ADAFRUIT_IO_KEY
+  // I am not sure how to use the api key yet, I am guessing some header, bearer token???
+  // Sample:
+  // Send new data with a value of 42
+  // $ curl -F 'value=42' -H "X-AIO-Key: {io_key}" https://io.adafruit.com/api/v2/{username}/feeds/{feed_key}/data
+
+  if (client.connect("io.adafruit.com", 80)) {
+    Serial.println("connected to Adafruit IO");
+
+    // Prepare the data payload
+    String payload = "value=" + String(value, 4);
+
+    // Create the POST request
+    String request = "POST /api/v2/";
+    request += ADAFRUIT_IO_USERNAME;
+    request += "/feeds/";
+    request += feedName;
+    request += "/data HTTP/1.1\r\n";
+    request += "Host: io.adafruit.com\r\n";
+    request += "X-AIO-Key: ";
+    request += ADAFRUIT_IO_KEY;
+    request += "\r\n";
+    request += "Content-Type: application/x-www-form-urlencoded\r\n";
+    request += "Content-Length: ";
+    request += payload.length();
+    request += "\r\n\r\n";
+    request += payload;
+
+    // Send the request
+    Serial.println(request); // Print for debugging
+    client.print(request);
+    
+    // Wait for the response
+    while (client.connected()) {
+      String line = client.readStringUntil('\n');
+      if (line == "\r") {
+        break;
+      }
+    }
+    // Read the response
+    while (client.available()) {
+      String line = client.readStringUntil('\n');
+      Serial.println(line); // Print the response for debugging
+    }
+
+    client.stop();
+  } else {
+    Serial.println("connection to Adafruit IO failed");
   }
 }
 
