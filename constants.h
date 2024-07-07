@@ -1,6 +1,6 @@
 // Define connections to sensor
-#define TRIGPIN 10
-#define ECHOPIN 11
+#define ULTRASONIC_TRIGPIN 10
+#define ULTRASONIC_ECHOPIN 11
 
 #define WATER_SENSOR_PIN_DRAIN     A0
 #define WATER_SENSOR_PIN_PUMP      A1

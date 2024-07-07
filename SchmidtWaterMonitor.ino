@@ -74,6 +74,7 @@ void setup() {
 
   initTankLevelSensor();
 }
+
 int loopCounter = 0;
 void loop() {
   ArduinoCloud.update();
@@ -132,8 +133,8 @@ void onIsTankTooHighChange() {
 
 void initTankLevelSensor() {
   // Set pinmodes for sensor connections
-  pinMode(ECHOPIN, INPUT);
-  pinMode(TRIGPIN, OUTPUT);
+  pinMode(ULTRASONIC_ECHOPIN, INPUT);
+  pinMode(ULTRASONIC_TRIGPIN, OUTPUT);
 }
 
 void sendToArduinoCloud(TankInfo tankInfo) {
@@ -308,18 +309,18 @@ float getAverageDistanceReading(int numReadings) {
 
 float getDistanceReading() {
     // Set the trigger pin LOW for 2uS
-    digitalWrite(TRIGPIN, LOW);
+    digitalWrite(ULTRASONIC_TRIGPIN, LOW);
     delayMicroseconds(2);
  
     // Set the trigger pin HIGH for 20us to send pulse
-    digitalWrite(TRIGPIN, HIGH);
+    digitalWrite(ULTRASONIC_TRIGPIN, HIGH);
     delayMicroseconds(10);
  
     // Return the trigger pin to LOW
-    digitalWrite(TRIGPIN, LOW);
+    digitalWrite(ULTRASONIC_TRIGPIN, LOW);
  
     // Measure the width of the incoming pulse
-    float duration = pulseIn(ECHOPIN, HIGH);
+    float duration = pulseIn(ULTRASONIC_ECHOPIN, HIGH);
  
     // Determine distance from duration
     // Use 343 metres per second as speed of sound
