@@ -131,7 +131,7 @@ void initLCD() {
 	lcd.init();
 
 	// Turn on the blacklight and print a message.
-	// lcd.backlight();
+	lcd.backlight();
   // TODO: motion sensor for backlight, for now... keep it off
   updateLcdStatus("Starting up!");
 }
