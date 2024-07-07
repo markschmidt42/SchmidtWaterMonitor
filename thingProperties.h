@@ -16,8 +16,12 @@ int water_sensor_sump_pump;
 int water_sensor_ro;
 
 bool water_sensor_is_wet;
+bool tank_is_too_low;
+bool tank_is_too_high;
 
 void onIsWetChange();
+void onIsTankTooLowChange();
+void onIsTankTooHighChange();
 
 void initProperties() {
   ArduinoCloud.setThingId(SECRET_THING_ID);
@@ -30,7 +34,10 @@ void initProperties() {
   ArduinoCloud.addProperty(water_sensor_pump,         READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, NULL);
   ArduinoCloud.addProperty(water_sensor_sump_pump,    READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, NULL);
   ArduinoCloud.addProperty(water_sensor_ro,           READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, NULL);
-  ArduinoCloud.addProperty(water_sensor_is_wet,       READWRITE, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, onIsWetChange);
+
+  ArduinoCloud.addProperty(water_sensor_is_wet,       READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, onIsWetChange);
+  ArduinoCloud.addProperty(tank_is_too_low,           READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, onIsTankTooLowChange);
+  ArduinoCloud.addProperty(tank_is_too_high,          READ, UPDATE_SENSORS_EVERY_SECONDS * SECONDS, onIsTankTooHighChange);
 }
 
 WiFiConnectionHandler ArduinoIoTPreferredConnection(SECRET_WIFI_SSID, SECRET_WIFI_PASS);

@@ -39,7 +39,7 @@ TankInfo previousTankInfo = {0, 0, 0, 0, 0, 0};
 struct LeakInfo {
   unsigned int drain;
   unsigned int pump;
-  unsigned int sumpPump;
+  unsigned int sump_pump;
   unsigned int ro;
 };
 
@@ -112,8 +112,22 @@ void loop() {
 }
 
 void onIsWetChange() {
-  Serial.print("'onIsWetChange'");
+  Serial.print("onIsWetChange: ");
   Serial.println(water_sensor_is_wet);
+}
+
+void onIsTankTooLowChange() {
+  Serial.print("onIsTankTooLowChange: ");
+  Serial.print(tank_is_too_low);
+  Serial.print(" gallons: ");
+  Serial.println(tank_level_gallons);
+}
+
+void onIsTankTooHighChange() {
+  Serial.print("onIsTankTooHighChange: ");
+  Serial.print(tank_is_too_high);
+  Serial.print(" gallons: ");
+  Serial.println(tank_level_gallons);
 }
 
 void initTankLevelSensor() {
@@ -133,31 +147,36 @@ void sendToArduinoCloud(TankInfo tankInfo) {
 void sendLeakInfoToCloud(LeakInfo leakInfo) {
   water_sensor_drain     = leakInfo.drain;
   water_sensor_pump      = leakInfo.pump;
-  water_sensor_sump_pump = leakInfo.sumpPump;
+  water_sensor_sump_pump = leakInfo.sump_pump;
   water_sensor_ro        = leakInfo.ro;
 }
 
 
 LeakInfo getLeakInfo() {
   LeakInfo leakInfo;
-  leakInfo.drain    = getWaterSensorPercent(WATER_SENSOR_PIN_DRAIN);
-  leakInfo.pump     = getWaterSensorPercent(WATER_SENSOR_PIN_PUMP);
-  leakInfo.sumpPump = getWaterSensorPercent(WATER_SENSOR_PIN_SUMP_PUMP);
-  leakInfo.ro       = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
+  leakInfo.drain     = getWaterSensorPercent(WATER_SENSOR_PIN_DRAIN);
+  leakInfo.pump      = getWaterSensorPercent(WATER_SENSOR_PIN_PUMP);
+  leakInfo.sump_pump = getWaterSensorPercent(WATER_SENSOR_PIN_SUMP_PUMP);
+  leakInfo.ro        = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
 
-  const int WET_THRESHOLD = 5;
-  
-  if (leakInfo.drain    >= WET_THRESHOLD
-   || leakInfo.pump     >= WET_THRESHOLD
-   || leakInfo.sumpPump >= WET_THRESHOLD
-   || leakInfo.ro       >= WET_THRESHOLD
-  ) {
-    water_sensor_is_wet = true;
-  } else {
-    water_sensor_is_wet = false;
-  }
+  setLeakAlertFlags(leakInfo);
 
   return leakInfo;
+}
+
+void setLeakAlertFlags(LeakInfo leakInfo) {
+  // if any ONE of these values are above the threshold, then consider it wet
+  water_sensor_is_wet = (
+       leakInfo.drain     >= WET_VALUE_THRESHOLD
+    || leakInfo.pump      >= WET_VALUE_THRESHOLD
+    || leakInfo.sump_pump >= WET_VALUE_THRESHOLD
+    || leakInfo.ro        >= WET_VALUE_THRESHOLD
+  );
+}
+
+void setTankInfoFlags(TankInfo tankInfo) {
+  tank_is_too_low  = (tankInfo.gallons <= TANK_LEVEL_TOO_LOW_VALUE);
+  tank_is_too_high = (tankInfo.gallons >= TANK_LEVEL_TOO_HIGH_VALUE);
 }
 
 int getWaterSensorPercent(int pin) {
@@ -212,6 +231,8 @@ TankInfo getTankInfo() {
   Serial.print(info.flowRate);
   Serial.print(" GPM, mm/s Rate: ");
   Serial.println(info.mmPerSecondRate);
+
+  setTankInfoFlags(info);
 
   return info;
 }
