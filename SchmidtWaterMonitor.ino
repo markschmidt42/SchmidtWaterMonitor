@@ -9,6 +9,7 @@
 #include "CQRobotTDS.h"
 #include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
+#include "AutomaticBacklight.h"
 
 const int MAIN_LOOP_DELAY_SECONDS = 5;
 
@@ -51,6 +52,7 @@ ArduinoLEDMatrix matrix;
 CQRobotTDS tds(CQROBOT_TDS_PIN);
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+AutomaticBacklight automaticBacklight(&lcd, PIR_MOTION_SENSOR_PIN, 30);
 
 void setup() {
   // Set up serial monitor
@@ -87,6 +89,7 @@ void setup() {
 int loopCounter = 0;
 void loop() {
   ArduinoCloud.update();
+  automaticBacklight.update();
 
   TankInfo tankInfo = getTankInfo();
   LeakInfo leakInfo = getLeakInfo();
@@ -129,9 +132,9 @@ void onIsTankTooHighChange() {
 void initLCD() {
   // initialize the LCD
 	lcd.init();
-
 	// Turn on the blacklight and print a message.
-	lcd.backlight();
+  automaticBacklight.turnOn(); 
+
   // TODO: motion sensor for backlight, for now... keep it off
   updateLcdStatus("Starting up!");
 }
@@ -258,7 +261,7 @@ int getWaterSensorPercent(int pin) {
 
 TankInfo getTankInfo() {
   TankInfo info;
-  info.distance = getAverageDistanceReading(100);
+  info.distance = getAverageDistanceReading(TANK_ULTRASONIC_SAMPLE_COUNT);
   info.readingTime = millis();
 
   // Convert mm to gallons

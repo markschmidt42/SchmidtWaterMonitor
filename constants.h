@@ -2,6 +2,8 @@
 #define ULTRASONIC_TRIGPIN 10
 #define ULTRASONIC_ECHOPIN 11
 
+#define PIR_MOTION_SENSOR_PIN 2
+
 #define WATER_SENSOR_PIN_DRAIN     A0
 #define WATER_SENSOR_PIN_PUMP      A1
 #define WATER_SENSOR_PIN_SUMP_PUMP A2
@@ -16,6 +18,8 @@
 #define UPDATE_SENSORS_EVERY_SECONDS 5
 
 #define WET_VALUE_THRESHOLD 5
+
+#define TANK_ULTRASONIC_SAMPLE_COUNT 10
 
 // our Tank typically starts filling at the 240 mark (120 mark on one of the tanks)
 #define TANK_LEVEL_TOO_LOW_VALUE 230 // give it a 10 gallon buffer before it alerts
