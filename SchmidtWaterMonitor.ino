@@ -1,4 +1,5 @@
 #include "arduino_secrets.h"
+#include "constants.h"
 #include "thingProperties.h"
 #include <SPI.h>
 #include <WiFi.h>
@@ -6,27 +7,14 @@
 #include "Arduino_CloudConnectionFeedback.h"
 #include "MedianFilterLib.h"
 
-// Define connections to sensor
-#define TRIGPIN 10
-#define ECHOPIN 11
-
-#define WATER_SENSOR_PIN_DRAIN     A0
-#define WATER_SENSOR_PIN_PUMP      A1
-#define WATER_SENSOR_PIN_SUMP_PUMP A2
-#define WATER_SENSOR_PIN_RO        A3
-
-
-// const int SENSORS_READING_DELAY = 1000 * 30; // every 30 seconds (on top of the read delays due to avgs)
-
-// for testing, do it a little faster
-const int SENSORS_READING_DELAY = 1000 * 12; // every 12 seconds (on top of the read delays due to avgs)
+const int MAIN_LOOP_DELAY_SECONDS = 1;
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
-const float SENSOR_MIN_RANGE_MM = 200; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
+const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
 const float INVALID_READING_TOO_CLOSE = -1000;
 
 // How far away is the top of the tank from the sensor?
-const float TOP_OF_TANK_MM = -116;
+const float TOP_OF_TANK_MM = -50;
 
 // How big is the tank?
 const int TANK_SIZE_IN_GALLONS = 450;
@@ -86,11 +74,10 @@ void setup() {
 
   initTankLevelSensor();
 }
-
+int loopCounter = 0;
 void loop() {
   ArduinoCloud.update();
 
-  // if (millis() > (lastUpdate + SENSORS_READING_DELAY)) {
   TankInfo tankInfo = getTankInfo();
   LeakInfo leakInfo = getLeakInfo();
   lastUpdate = millis(); // we are going to consider this the last update time (so, if it takes time to push it to the cloud, we are ignorning that part)
@@ -114,11 +101,14 @@ void loop() {
   sendLeakInfoToCloud(leakInfo);
 
   // Update previousTankInfo
-  previousTankInfo = tankInfo;
-  // }
+  // only update previous every 5 times, this is used for flow rate only
+  if (loopCounter % 5 == 0) {
+    previousTankInfo = tankInfo;
+  }
 
   // Delay before repeating measurement
-  delay(1000);
+  delay(MAIN_LOOP_DELAY_SECONDS * 1000);
+  loopCounter++;
 }
 
 void initTankLevelSensor() {
@@ -131,7 +121,8 @@ void sendToArduinoCloud(TankInfo tankInfo) {
   tank_distance_from_top_mm = tankInfo.distance;
   tank_level_gallons        = round(tankInfo.gallons);
   tank_level_percent        = tankInfo.level * 100;
-  tank_flow_rate_gpm        = tankInfo.flowRate;
+  tank_flow_rate_gpm        = round(tankInfo.flowRate * 10) / 10.0; // round to 1 decimal
+  Serial.println(tank_flow_rate_gpm);
 }
 
 void sendLeakInfoToCloud(LeakInfo leakInfo) {
@@ -163,9 +154,8 @@ int getWaterSensorPercent(int pin) {
 
 TankInfo getTankInfo() {
   TankInfo info;
+  info.distance = getAverageDistanceReading(20);
   info.readingTime = millis();
-
-  info.distance = getAverageDistanceReading(50);
 
   // Convert mm to gallons
   // This is really the "empty space, in gallons"
@@ -272,7 +262,7 @@ float getAverageDistanceReading(int numReadings) {
     if (totalReadings >= numReadings * 10) {
       break;
     }
-    delay(100); // Small delay between readings
+    delay(200); // Small delay between readings
   }
 
   return median;
@@ -285,7 +275,7 @@ float getDistanceReading() {
  
     // Set the trigger pin HIGH for 20us to send pulse
     digitalWrite(TRIGPIN, HIGH);
-    delayMicroseconds(20);
+    delayMicroseconds(10);
  
     // Return the trigger pin to LOW
     digitalWrite(TRIGPIN, LOW);
