@@ -16,6 +16,7 @@ public:
   void turnOn();
   void turnOff();
   void update();
+  bool isOn();
 };
 
 #endif // AUTOMATIC_BACKLIGHT_H

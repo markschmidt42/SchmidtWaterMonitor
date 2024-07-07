@@ -19,7 +19,7 @@
 
 #define WET_VALUE_THRESHOLD 5
 
-#define TANK_ULTRASONIC_SAMPLE_COUNT 10
+#define TANK_ULTRASONIC_SAMPLE_COUNT 50
 
 // our Tank typically starts filling at the 240 mark (120 mark on one of the tanks)
 #define TANK_LEVEL_TOO_LOW_VALUE 230 // give it a 10 gallon buffer before it alerts

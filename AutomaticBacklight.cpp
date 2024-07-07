@@ -29,3 +29,7 @@ void AutomaticBacklight::update() {
     turnOff();
   }
 }
+
+bool AutomaticBacklight::isOn() {
+  return backlightOn;
+}

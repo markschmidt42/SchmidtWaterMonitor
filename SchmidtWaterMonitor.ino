@@ -89,7 +89,7 @@ void setup() {
 int loopCounter = 0;
 void loop() {
   ArduinoCloud.update();
-  automaticBacklight.update();
+  updateAutomaticBacklightStatus();
 
   TankInfo tankInfo = getTankInfo();
   LeakInfo leakInfo = getLeakInfo();
@@ -97,7 +97,7 @@ void loop() {
   updateTdsValueWhenAvailable();
   sendTankInfoToCloud(tankInfo);
   sendLeakInfoToCloud(leakInfo);
-  upodateLcdInfo();
+  updateLcdInfo();
 
   // Update previousTankInfo
   // only update previous every 5 times, this is used for flow rate only
@@ -144,7 +144,7 @@ void updateLcdStatus(String message) {
   lcd.print(message);
 }
 
-void upodateLcdInfo() {
+void updateLcdInfo() {
   // 0000000000111111
   // 0123456789012345
   // 123g 80% -0.0gpm
@@ -184,6 +184,12 @@ void upodateLcdInfo() {
     lcd.print("DRY");
   }
 
+}
+
+
+void updateAutomaticBacklightStatus() {
+  automaticBacklight.update();
+  utility_room_motion = automaticBacklight.isOn();
 }
 
 void initTankLevelSensor() {
