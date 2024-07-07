@@ -111,6 +111,11 @@ void loop() {
   loopCounter++;
 }
 
+void onIsWetChange() {
+  Serial.print("'onIsWetChange'");
+  Serial.println(water_sensor_is_wet);
+}
+
 void initTankLevelSensor() {
   // Set pinmodes for sensor connections
   pinMode(ECHOPIN, INPUT);
@@ -139,6 +144,18 @@ LeakInfo getLeakInfo() {
   leakInfo.pump     = getWaterSensorPercent(WATER_SENSOR_PIN_PUMP);
   leakInfo.sumpPump = getWaterSensorPercent(WATER_SENSOR_PIN_SUMP_PUMP);
   leakInfo.ro       = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
+
+  const int WET_THRESHOLD = 5;
+  
+  if (leakInfo.drain    >= WET_THRESHOLD
+   || leakInfo.pump     >= WET_THRESHOLD
+   || leakInfo.sumpPump >= WET_THRESHOLD
+   || leakInfo.ro       >= WET_THRESHOLD
+  ) {
+    water_sensor_is_wet = true;
+  } else {
+    water_sensor_is_wet = false;
+  }
 
   return leakInfo;
 }
