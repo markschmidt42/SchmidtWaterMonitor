@@ -6,8 +6,9 @@
 #include "Arduino_LED_Matrix.h"
 #include "Arduino_CloudConnectionFeedback.h"
 #include "MedianFilterLib.h"
+#include "CQRobotTDS.h"
 
-const int MAIN_LOOP_DELAY_SECONDS = 1;
+const int MAIN_LOOP_DELAY_SECONDS = 5;
 
 const float SENSOR_OFFSET_MM = 21; // minor tweak to get the sensor to match real world measurements
 const float SENSOR_MIN_RANGE_MM = 250; // unit handles 20 cm (200 mm), but giving it a bit of a buffer
@@ -45,8 +46,7 @@ struct LeakInfo {
 
 ArduinoLEDMatrix matrix;
 
-
-unsigned long lastUpdate = 0;
+CQRobotTDS tds(CQROBOT_TDS_PIN);
 
 void setup() {
   // Set up serial monitor
@@ -81,31 +81,16 @@ void loop() {
 
   TankInfo tankInfo = getTankInfo();
   LeakInfo leakInfo = getLeakInfo();
-  lastUpdate = millis(); // we are going to consider this the last update time (so, if it takes time to push it to the cloud, we are ignorning that part)
 
-  float tankLevelInInches = convertToInches(tankInfo.distance);
-  String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
-
-  if (tankInfo.distance == 0) {
-    Serial.println("INVALID READING!!!");
-  } else {
-
-    // Print result to serial monitor
-    Serial.print("Average distance: ");
-    Serial.print(tankInfo.distance);
-    Serial.print(" mm (");
-    Serial.print(tankLevelFeetAndInches);
-    Serial.println(")");
-  }
-
-  sendToArduinoCloud(tankInfo);
+  updateTdsValueWhenAvailable();
+  sendTankInfoToCloud(tankInfo);
   sendLeakInfoToCloud(leakInfo);
 
   // Update previousTankInfo
   // only update previous every 5 times, this is used for flow rate only
-  if (loopCounter % 5 == 0) {
-    previousTankInfo = tankInfo;
-  }
+  // if (loopCounter % 5 == 0) {
+  previousTankInfo = tankInfo;
+  //}
 
   // Delay before repeating measurement
   delay(MAIN_LOOP_DELAY_SECONDS * 1000);
@@ -137,12 +122,16 @@ void initTankLevelSensor() {
   pinMode(ULTRASONIC_TRIGPIN, OUTPUT);
 }
 
-void sendToArduinoCloud(TankInfo tankInfo) {
+void sendTankInfoToCloud(TankInfo tankInfo) {
+  if (tankInfo.distance <= 0) {
+    Serial.println("sendTankInfoToCloud() invalid reading, not sending...");
+    return;
+  }
+
   tank_distance_from_top_mm = tankInfo.distance;
   tank_level_gallons        = round(tankInfo.gallons);
   tank_level_percent        = tankInfo.level * 100;
   tank_flow_rate_gpm        = round(tankInfo.flowRate * 10) / 10.0; // round to 1 decimal
-  Serial.println(tank_flow_rate_gpm);
 }
 
 void sendLeakInfoToCloud(LeakInfo leakInfo) {
@@ -151,7 +140,6 @@ void sendLeakInfoToCloud(LeakInfo leakInfo) {
   water_sensor_sump_pump = leakInfo.sump_pump;
   water_sensor_ro        = leakInfo.ro;
 }
-
 
 LeakInfo getLeakInfo() {
   LeakInfo leakInfo;
@@ -180,6 +168,17 @@ void setTankInfoFlags(TankInfo tankInfo) {
   tank_is_too_high = (tankInfo.gallons >= TANK_LEVEL_TOO_HIGH_VALUE);
 }
 
+float getTdsValue() {
+  float temp = 17.0; // read temprature from a real sensor
+	float tdsValue = tds.update(temp);
+
+  Serial.print("TDS value: ");
+	Serial.print(tdsValue, 0);
+	Serial.println(" ppm");  
+
+  return tdsValue;
+}
+
 int getWaterSensorPercent(int pin) {
   int rawValue = analogRead(pin);
 
@@ -191,7 +190,7 @@ int getWaterSensorPercent(int pin) {
 
 TankInfo getTankInfo() {
   TankInfo info;
-  info.distance = getAverageDistanceReading(20);
+  info.distance = getAverageDistanceReading(100);
   info.readingTime = millis();
 
   // Convert mm to gallons
@@ -208,13 +207,13 @@ TankInfo getTankInfo() {
   // Calculate flow rates
   if (previousTankInfo.readingTime > 0) {
     unsigned long timeDifference = info.readingTime - previousTankInfo.readingTime; // Time difference in milliseconds
-    float distanceDifference = info.distance - previousTankInfo.distance; // Distance difference in mm
+    float distanceDifference = info.distance - previousTankInfo.distance; // Distance difference in mm, rounded to nearest mm
     float gallonsDifference  = info.gallons - previousTankInfo.gallons;
 
     Serial.print("fabs(distanceDifference): ");
     Serial.println(fabs(distanceDifference));
     // diff needs to be more than 1.1 mm (spec says it is good within 10 mm, but it seems to be better than that, I am going with 1.1)
-    if (fabs(distanceDifference) > 1.1) {
+    if (fabs(distanceDifference) > 0 && timeDifference > 0) {
       info.mmPerSecondRate = distanceDifference / (timeDifference / 1000.0); // Convert ms to seconds
       info.flowRate = gallonsDifference / (timeDifference / 60000.0); // Convert to gallons per minute
     }
@@ -232,6 +231,30 @@ TankInfo getTankInfo() {
   Serial.print(info.flowRate);
   Serial.print(" GPM, mm/s Rate: ");
   Serial.println(info.mmPerSecondRate);
+
+  // if it is using less than a half gallon a minute, then we are going to say it is not flowing...
+  if (fabs(info.flowRate) <= 0.4) {
+    info.flowRate        = 0;
+    info.mmPerSecondRate = 0;
+    Serial.print("TOO SLOW... OVERRDING... Flow Rate: ");
+    Serial.print(info.flowRate);
+    Serial.print(" GPM, mm/s Rate: ");
+    Serial.println(info.mmPerSecondRate);
+  }
+
+  float tankLevelInInches = convertToInches(info.distance);
+  String tankLevelFeetAndInches = formatFeetAndInches(tankLevelInInches);
+
+  if (info.distance <= 0) {
+    Serial.println("INVALID READING!!!");
+  } else {
+    // Print result to serial monitor
+    Serial.print("Average distance: ");
+    Serial.print(info.distance);
+    Serial.print(" mm (");
+    Serial.print(tankLevelFeetAndInches);
+    Serial.println(")");
+  }
 
   setTankInfoFlags(info);
 
@@ -273,6 +296,24 @@ TankInfo getTankInfo() {
 //   return minValue;
 // }
 
+
+void updateTdsValueWhenAvailable() {
+  // if tank level gallons is over X (meaning we can reach it with the sensor, then take a measurement)
+  if (tank_level_gallons < TANK_LEVEL_GALLONS_FOR_TDS_MEASUREMENT) {
+    return;
+  }
+
+  int tdsValue = getTdsValue();
+  Serial.println(tdsValue);
+  // if invalid reading
+  if (tdsValue <= 0) {
+    return;
+  }
+
+  Serial.println("UPDATING: water_test_tds_ppm");
+  water_test_tds_ppm = tdsValue;
+}
+
 float getAverageDistanceReading(int numReadings = 10);
 float getAverageDistanceReading(int numReadings) {
   int totalReadings = 0;
@@ -301,7 +342,7 @@ float getAverageDistanceReading(int numReadings) {
     if (totalReadings >= numReadings * 10) {
       break;
     }
-    delay(200); // Small delay between readings
+    delay(100); // Small delay between readings
   }
 
   return median;

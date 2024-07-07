@@ -7,6 +7,8 @@
 #define WATER_SENSOR_PIN_SUMP_PUMP A2
 #define WATER_SENSOR_PIN_RO        A3
 
+#define CQROBOT_TDS_PIN            A5
+
 
 #define UPDATE_SENSORS_EVERY_SECONDS 5
 
@@ -17,3 +19,6 @@
 
 // our Tank typically starts filling at the 360 mark (180 mark on one of the tanks)
 #define TANK_LEVEL_TOO_HIGH_VALUE 370 // give it a 10 gallon buffer before it alerts
+
+// if the tank is over 320, then we can reach the water with our TDS probe
+#define TANK_LEVEL_GALLONS_FOR_TDS_MEASUREMENT 320
