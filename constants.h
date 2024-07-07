@@ -5,9 +5,12 @@
 #define WATER_SENSOR_PIN_DRAIN     A0
 #define WATER_SENSOR_PIN_PUMP      A1
 #define WATER_SENSOR_PIN_SUMP_PUMP A2
-#define WATER_SENSOR_PIN_RO        A3
+// #define WATER_SENSOR_PIN_RO        A3 // removed for now (ran out of space)
 
-#define CQROBOT_TDS_PIN            A5
+#define CQROBOT_TDS_PIN            A3
+
+#define LCD_SDA_PIN                A4
+#define LCD_SCL_PIN                A5
 
 
 #define UPDATE_SENSORS_EVERY_SECONDS 5

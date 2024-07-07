@@ -7,6 +7,8 @@
 #include "Arduino_CloudConnectionFeedback.h"
 #include "MedianFilterLib.h"
 #include "CQRobotTDS.h"
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
 
 const int MAIN_LOOP_DELAY_SECONDS = 5;
 
@@ -48,15 +50,20 @@ ArduinoLEDMatrix matrix;
 
 CQRobotTDS tds(CQROBOT_TDS_PIN);
 
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
 void setup() {
   // Set up serial monitor
   Serial.begin(115200);
   delay(1500); 
   Serial.println("Starting up...");
+  initLCD();
 
   // Connect to Arduino Cloud
   initProperties();
+
   /* Initialize Arduino IoT Cloud library */
+  updateLcdStatus("Connecting...   ");
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
   ArduinoCloud.printDebugInfo();
   // This line will block until we're connected to Arduino Cloud
@@ -64,6 +71,7 @@ void setup() {
   matrix.begin();
   waitForArduinoCloudConnection(matrix);
   
+  updateLcdStatus("Connected!      ");
   Serial.println("Program started!");
 
   // Use the LED matrix to do something else
@@ -72,6 +80,7 @@ void setup() {
 
   setDebugMessageLevel(DBG_INFO);
 
+  updateLcdStatus("Init Sensors... ");
   initTankLevelSensor();
 }
 
@@ -85,6 +94,7 @@ void loop() {
   updateTdsValueWhenAvailable();
   sendTankInfoToCloud(tankInfo);
   sendLeakInfoToCloud(leakInfo);
+  upodateLcdInfo();
 
   // Update previousTankInfo
   // only update previous every 5 times, this is used for flow rate only
@@ -114,6 +124,63 @@ void onIsTankTooHighChange() {
   Serial.print(tank_is_too_high);
   Serial.print(" gallons: ");
   Serial.println(tank_level_gallons);
+}
+
+void initLCD() {
+  // initialize the LCD
+	lcd.init();
+
+	// Turn on the blacklight and print a message.
+	// lcd.backlight();
+  // TODO: motion sensor for backlight, for now... keep it off
+  updateLcdStatus("Starting up!");
+}
+
+void updateLcdStatus(String message) {
+  lcd.setCursor(0,0);  // col, row, (0-based)
+  lcd.print(message);
+}
+
+void upodateLcdInfo() {
+  // 0000000000111111
+  // 0123456789012345
+  // 123g 80% -0.0gpm
+  // TDS: 114ppm  WET
+
+  // gallons
+  lcd.setCursor(0,0);
+  lcd.print(tank_level_gallons);
+  lcd.setCursor(3,0);
+  lcd.print("g ");
+
+  // % full
+  lcd.setCursor(5,0);
+  lcd.print(round(tank_level_percent));
+  lcd.setCursor(7,0);
+  lcd.print("% ");
+
+  // gpm
+  lcd.setCursor(9,0);
+  lcd.print(tank_flow_rate_gpm);
+  lcd.setCursor(13,0);
+  lcd.print("gpm");
+
+  // PPM
+  lcd.setCursor(0,1);
+  lcd.print("TDS: ");
+  lcd.setCursor(5,1);
+  lcd.print(water_test_tds_ppm);
+  lcd.setCursor(8,1);
+  lcd.print("ppm  ");
+
+  // WET/DRY
+  lcd.setCursor(13,1);
+  if (water_sensor_is_wet) {
+    lcd.print("WET");
+  } else {
+    lcd.print("DRY");
+  }
+
 }
 
 void initTankLevelSensor() {
@@ -146,7 +213,8 @@ LeakInfo getLeakInfo() {
   leakInfo.drain     = getWaterSensorPercent(WATER_SENSOR_PIN_DRAIN);
   leakInfo.pump      = getWaterSensorPercent(WATER_SENSOR_PIN_PUMP);
   leakInfo.sump_pump = getWaterSensorPercent(WATER_SENSOR_PIN_SUMP_PUMP);
-  leakInfo.ro        = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
+  leakInfo.ro        = 0;
+  //leakInfo.ro        = getWaterSensorPercent(WATER_SENSOR_PIN_RO);
 
   setLeakAlertFlags(leakInfo);
 
