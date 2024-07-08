@@ -57,15 +57,15 @@ AutomaticBacklight automaticBacklight(&lcd, PIR_MOTION_SENSOR_PIN, 30);
 void setup() {
   // Set up serial monitor
   Serial.begin(115200);
-  delay(1500); 
-  Serial.println("Starting up...");
   initLCD();
+  delay(1500); // small delay for serial port setup 
+  Serial.println("Starting up...");
 
   // Connect to Arduino Cloud
   initProperties();
 
   /* Initialize Arduino IoT Cloud library */
-  updateLcdStatus("Connecting...   ");
+  updateLcdStatus("Connecting to", "the internets...");
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
   ArduinoCloud.printDebugInfo();
   // This line will block until we're connected to Arduino Cloud
@@ -73,8 +73,9 @@ void setup() {
   matrix.begin();
   waitForArduinoCloudConnection(matrix);
   
-  updateLcdStatus("Connected!      ");
+  updateLcdStatus("We're CONNECTED!");
   Serial.println("Program started!");
+  delay(1000); // small delay for status update
 
   // Use the LED matrix to do something else
   matrix.loadSequence(LEDMATRIX_ANIMATION_TETRIS_INTRO);
@@ -82,7 +83,7 @@ void setup() {
 
   setDebugMessageLevel(DBG_INFO);
 
-  updateLcdStatus("Init Sensors... ");
+  updateLcdStatus("Initializing", "Sensors...");
   initTankLevelSensor();
 }
 
@@ -136,60 +137,59 @@ void initLCD() {
   automaticBacklight.turnOn(); 
 
   // TODO: motion sensor for backlight, for now... keep it off
-  updateLcdStatus("Starting up!");
+  updateLcdStatus("Hold on to your", "butts...");
 }
 
-void updateLcdStatus(String message) {
-  lcd.setCursor(0,0);  // col, row, (0-based)
-  lcd.print(message);
+void updateLcdStatus(String line1) {
+  updateLcdStatus(line1, "");
+}
+
+void updateLcdStatus(String line1, String line2) {
+  lcdPrintRow(0, line1);
+  lcdPrintRow(1, line2);
 }
 
 void updateLcdInfo() {
-  // 0000000000111111
-  // 0123456789012345
+  // 0000000000111111 ( 2 rows)
+  // 0123456789012345 (16 cols)
   // 123g 80% -0.0gpm
-  // TDS: 114ppm  WET
+  // TDS 114ppm   WET
+  // 123g TDS=114ppm
+  // 80% -2.34gpm WET
 
-  // gallons
-  lcd.setCursor(0,0);
-  lcd.print(tank_level_gallons);
-  lcd.setCursor(3,0);
-  lcd.print("g ");
+  String lineOne = "";
+  lineOne.concat((int)tank_level_gallons);
+  lineOne.concat("g ");
+  lineOne.concat("TDS=");
+  lineOne.concat(water_test_tds_ppm);
+  lineOne.concat("ppm");
 
-  // % full
-  lcd.setCursor(5,0);
-  lcd.print(round(tank_level_percent));
-  lcd.setCursor(7,0);
-  lcd.print("% ");
-
-  // gpm
-  lcd.setCursor(9,0);
-  lcd.print(tank_flow_rate_gpm);
-  lcd.setCursor(13,0);
-  lcd.print("gpm");
-
-  // PPM
-  lcd.setCursor(0,1);
-  lcd.print("TDS: ");
-  lcd.setCursor(5,1);
-  lcd.print(water_test_tds_ppm);
-  lcd.setCursor(8,1);
-  lcd.print("ppm  ");
-
-  // WET/DRY
-  lcd.setCursor(13,1);
+  String lineTwo = "";
+  lineTwo.concat((int)round(tank_level_percent));
+  lineTwo.concat("% ");
+  lineTwo.concat(tank_flow_rate_gpm);
+  lineTwo.concat("gpm ");
+  
   if (water_sensor_is_wet) {
-    lcd.print("WET");
+    lineTwo.concat("WET");
   } else {
-    lcd.print("DRY");
+    lineTwo.concat("DRY");
   }
 
+  lcdPrintRow(0, lineOne);
+  lcdPrintRow(1, lineTwo);
 }
 
+void lcdPrintRow(int rowIndex, String str) {
+  lcd.setCursor(0, rowIndex);
+  lcd.print(str);
+  // fill with trailing spaces
+  for(int i = str.length(); i<16;i++) lcd.print(' ');
+}
 
 void updateAutomaticBacklightStatus() {
   automaticBacklight.update();
-  utility_room_motion = automaticBacklight.isOn();
+  utility_room_motion = automaticBacklight.isMotion();
 }
 
 void initTankLevelSensor() {
@@ -338,42 +338,6 @@ TankInfo getTankInfo() {
   return info;
 }
 
-// float getMinDistanceReading(int numReadings) {
-//   int totalReadings = 0;
-//   int validReadings = 0;
-  
-//   float minValue = 10000000;
-
-//   float distance = 0;
-
-//   while (validReadings < numReadings) {
-//     distance = getDistanceReading();
-//     Serial.print("   distance: ");
-//     Serial.println(distance);
-
-
-//     if (distance > 0) {
-//       if (distance < minValue) {
-//         minValue = distance;
-//       }
-//       validReadings++;
-//     }
-
-//     totalReadings++;
-
-//     // if we cannot get valid readings, then we will bail
-//     if (totalReadings >= numReadings * 10) {
-//       break;
-//     }
-//     delay(100); // Small delay between readings
-//   }
-
-//   Serial.print("* *minValue: ");
-//   Serial.println(minValue);
-//   return minValue;
-// }
-
-
 void updateTdsValueWhenAvailable() {
   // if tank level gallons is over X (meaning we can reach it with the sensor, then take a measurement)
   if (tank_level_gallons < TANK_LEVEL_GALLONS_FOR_TDS_MEASUREMENT) {
@@ -391,7 +355,10 @@ void updateTdsValueWhenAvailable() {
   water_test_tds_ppm = tdsValue;
 }
 
-float getAverageDistanceReading(int numReadings = 10);
+float getAverageDistanceReading() {
+  return getAverageDistanceReading(10);
+}
+
 float getAverageDistanceReading(int numReadings) {
   int totalReadings = 0;
   int validReadings = 0;

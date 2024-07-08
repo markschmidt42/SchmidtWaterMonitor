@@ -18,18 +18,18 @@ void AutomaticBacklight::turnOff() {
 }
 
 void AutomaticBacklight::update() {
-  int motionState = digitalRead(motionSensorPin);
-  Serial.print("motionState: ");
-  Serial.print(motionState);
+  bool isMotionState = isMotion();
+  Serial.print("isMotionState: ");
+  Serial.print(isMotionState);
   Serial.print(",  lastMotion: ");
   Serial.println(millis() - lastMotionTime);
-  if (motionState == HIGH) {
+  if (isMotionState) {
     turnOn();
   } else if (backlightOn && (millis() - lastMotionTime > timeout)) {
     turnOff();
   }
 }
 
-bool AutomaticBacklight::isOn() {
-  return backlightOn;
+bool AutomaticBacklight::isMotion() {
+  return (digitalRead(motionSensorPin) == HIGH);
 }
